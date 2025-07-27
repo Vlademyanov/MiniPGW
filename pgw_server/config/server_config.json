@@ -5,11 +5,11 @@
     "cdr_file": "cdr.log",
     "http_port": 8080,
     "graceful_shutdown_rate": 10,
-    "shutdown_timeout_sec": 30,
     "log_file": "pgw.log",
     "log_level": "DEBUG",
     "cleanup_interval_sec": 5,
     "max_requests_per_minute": 100,
+    "metrics_port": 9100,
     "blacklist": [
         "001010123456789",
         "001010000000001"

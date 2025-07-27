@@ -1,12 +1,14 @@
-#include "SessionManager.h"
+#include <SessionManager.h>
 #include <utility>
 #include <random>
 
+#include <ServerMetrics.h>
+
 SessionManager::SessionManager(std::shared_ptr<ISessionRepository> sessionRepo,
-                             std::shared_ptr<ICdrRepository> cdrRepo,
-                             std::shared_ptr<Blacklist> blacklist,
-                             std::shared_ptr<RateLimiter> rateLimiter,
-                             std::shared_ptr<Logger> logger)
+                               std::shared_ptr<ICdrRepository> cdrRepo,
+                               std::shared_ptr<Blacklist> blacklist,
+                               std::shared_ptr<RateLimiter> rateLimiter,
+                               std::shared_ptr<Logger> logger)
     : _sessionRepo(std::move(sessionRepo)),
       _cdrRepo(std::move(cdrRepo)),
       _blacklist(std::move(blacklist)),
@@ -29,6 +31,7 @@ SessionResult SessionManager::createSession(const std::string& imsi) const {
     if (isImsiBlacklisted(imsi)) {
         _logger->info("Session rejected: IMSI " + imsi + " is blacklisted");
         logCdr(imsi, "rejected_blacklist");
+        ServerMetrics::incRejectedRequests();
         return SessionResult::REJECTED;
     }
     
@@ -36,13 +39,16 @@ SessionResult SessionManager::createSession(const std::string& imsi) const {
     if (!_rateLimiter->allowRequest(imsi)) {
         _logger->warn("Session rejected: Rate limit exceeded for IMSI " + imsi);
         logCdr(imsi, "rejected_rate_limit");
+        ServerMetrics::incRejectedRequests();
         return SessionResult::REJECTED;
     }
     
     // Проверка существования сессии
     if (_sessionRepo->sessionExists(imsi)) {
-        _logger->debug("Session already exists for IMSI: " + imsi + ", returning CREATED");
-        return SessionResult::CREATED; // Сессия уже существует, считаем что создали
+        _sessionRepo->refreshSession(imsi);
+        _logger->debug("Session already exists for IMSI: " + imsi + ", refreshed");
+        ServerMetrics::incProcessedRequests();
+        return SessionResult::CREATED;
     }
     
     try {
@@ -53,6 +59,7 @@ SessionResult SessionManager::createSession(const std::string& imsi) const {
         if (_sessionRepo->addSession(session)) {
             _logger->info("New session successfully created for IMSI: " + imsi);
             logCdr(imsi, "create");
+            ServerMetrics::incProcessedRequests();
             return SessionResult::CREATED;
         } else {
             _logger->error("Repository error: Failed to add session for IMSI: " + imsi);
@@ -88,21 +95,19 @@ bool SessionManager::removeSession(const std::string& imsi, const std::string& a
     }
 }
 
-size_t SessionManager::cleanExpiredSessions(std::chrono::seconds timeout) const {
+size_t SessionManager::cleanExpiredSessions(std::chrono::seconds timeout, const std::atomic<bool>* stopFlag) const {
     _logger->debug("Starting expired sessions cleanup (timeout: " + std::to_string(timeout.count()) + "s)");
     
     // Получаем все истекшие сессии
     auto expiredSessions = _sessionRepo->getExpiredSessions(timeout.count());
-    
-    if (expiredSessions.empty()) {
-        _logger->debug("No expired sessions found");
-        return 0;
-    }
-    
-    _logger->debug("Found " + std::to_string(expiredSessions.size()) + " expired sessions to clean");
+
     
     size_t removedCount = 0;
     for (const auto& session : expiredSessions) {
+        if (stopFlag && !stopFlag->load()) {
+            _logger->debug("Session cleanup interrupted by stop flag");
+            break;
+        }
         const auto& imsi = session.getImsi();
         if (_sessionRepo->removeSession(imsi)) {
             logCdr(imsi, "timeout");
@@ -128,7 +133,6 @@ size_t SessionManager::getActiveSessionsCount() const {
 
 std::vector<std::string> SessionManager::getAllActiveImsis() const {
     auto imsis = _sessionRepo->getAllImsis();
-    _logger->debug("Retrieved " + std::to_string(imsis.size()) + " active IMSIs");
     return imsis;
 }
 

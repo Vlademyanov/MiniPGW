@@ -1,11 +1,12 @@
 #pragma once
 
-#include "ClientConfig.h"
-#include "ClientLogger.h"
+#include <ClientConfig.h>
+#include <ClientLogger.h>
 #include <string>
 #include <memory>
-#include <cstdint>
 #include <utility>
+
+class FloodWorker;
 
 /**
  * @brief Основной класс клиента для взаимодействия с PGW сервером
@@ -43,6 +44,9 @@ public:
     std::pair<bool, std::string> sendRequest(const std::string& imsi);
 
 private:
+
+    friend class FloodWorker;
+
     /**
      * @brief Настраивает UDP сокет
      * @return true если сокет успешно создан, иначе false

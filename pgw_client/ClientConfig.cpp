@@ -1,4 +1,4 @@
-#include "ClientConfig.h"
+#include <ClientConfig.h>
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -10,15 +10,13 @@ ClientConfig::ClientConfig(const std::string& configPath)
 
 bool ClientConfig::loadConfig() {
     try {
-        // Открываем файл конфигурации
         std::ifstream configFile(_configPath);
         if (!configFile.is_open()) {
             _lastError = "Failed to open config file: " + _configPath;
             std::cerr << _lastError << std::endl;
             return false;
         }
-        
-        // Читаем содержимое файла
+
         std::stringstream buffer;
         buffer << configFile.rdbuf();
         std::string content = buffer.str();
@@ -29,8 +27,7 @@ bool ClientConfig::loadConfig() {
         parseJsonValue("log_file", content, _config.log_file);
         parseJsonValue("log_level", content, _config.log_level);
         parseJsonUint32("receive_timeout_ms", content, _config.receive_timeout_ms);
-        
-        // Проверяем валидность конфигурации
+
         _isValid = validateConfig();
         
         return _isValid;
@@ -42,20 +39,19 @@ bool ClientConfig::loadConfig() {
 }
 
 void ClientConfig::parseJsonValue(const std::string& key, const std::string& json, std::string& value) {
-    // Ищем ключ в формате "key": "value"
     std::string searchKey = "\"" + key + "\"";
     size_t keyPos = json.find(searchKey);
     
     if (keyPos != std::string::npos) {
-        // Находим начало значения (после ":")
+        // Находим начало значения
         size_t colonPos = json.find(':', keyPos);
         if (colonPos != std::string::npos) {
-            // Находим начало строкового значения (после '"')
+            // Находим начало строкового значения
             size_t valueStartPos = json.find('\"', colonPos);
             if (valueStartPos != std::string::npos) {
-                valueStartPos++; // Пропускаем открывающую кавычку
+                valueStartPos++;
                 
-                // Находим конец строкового значения (закрывающую кавычку)
+                // Находим конец строкового значения
                 size_t valueEndPos = json.find('\"', valueStartPos);
                 if (valueEndPos != std::string::npos) {
                     // Извлекаем значение
@@ -67,18 +63,17 @@ void ClientConfig::parseJsonValue(const std::string& key, const std::string& jso
 }
 
 void ClientConfig::parseJsonUint16(const std::string& key, const std::string& json, uint16_t& value) {
-    // Ищем ключ в формате "key": value
     std::string searchKey = "\"" + key + "\"";
     size_t keyPos = json.find(searchKey);
     
     if (keyPos != std::string::npos) {
-        // Находим начало значения (после ":")
+        // Находим начало значения
         size_t colonPos = json.find(':', keyPos);
         if (colonPos != std::string::npos) {
-            // Находим начало числового значения (пропускаем пробелы)
+            // Находим начало числового значения
             size_t valueStartPos = json.find_first_not_of(" \t\n\r", colonPos + 1);
             if (valueStartPos != std::string::npos) {
-                // Находим конец числового значения (до запятой, закрывающей скобки или конца строки)
+                // Находим конец числового значения
                 size_t valueEndPos = json.find_first_of(",}\n", valueStartPos);
                 if (valueEndPos != std::string::npos) {
                     // Извлекаем значение
@@ -96,18 +91,17 @@ void ClientConfig::parseJsonUint16(const std::string& key, const std::string& js
 }
 
 void ClientConfig::parseJsonUint32(const std::string& key, const std::string& json, uint32_t& value) {
-    // Ищем ключ в формате "key": value
     std::string searchKey = "\"" + key + "\"";
     size_t keyPos = json.find(searchKey);
     
     if (keyPos != std::string::npos) {
-        // Находим начало значения (после ":")
+        // Находим начало значения
         size_t colonPos = json.find(':', keyPos);
         if (colonPos != std::string::npos) {
-            // Находим начало числового значения (пропускаем пробелы)
+            // Находим начало числового значения
             size_t valueStartPos = json.find_first_not_of(" \t\n\r", colonPos + 1);
             if (valueStartPos != std::string::npos) {
-                // Находим конец числового значения (до запятой, закрывающей скобки или конца строки)
+                // Находим конец числового значения
                 size_t valueEndPos = json.find_first_of(",}\n", valueStartPos);
                 if (valueEndPos != std::string::npos) {
                     // Извлекаем значение
@@ -137,7 +131,7 @@ void ClientConfig::setDefaults() {
 }
 
 bool ClientConfig::validateConfig() {
-    // Проверяем IP адрес (простая проверка)
+    // Проверяем IP адрес
     if (_config.server_ip.empty()) {
         _lastError = "Server IP cannot be empty";
         return false;

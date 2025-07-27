@@ -1,4 +1,4 @@
-#include "InMemorySessionRepository.h"
+#include <InMemorySessionRepository.h>
 
 #include <chrono>
 #include <ranges>
@@ -61,7 +61,7 @@ bool InMemorySessionRepository::sessionExists(const std::string& imsi) const {
     std::lock_guard<std::mutex> lock(_mutex);
     bool exists = _sessions.contains(imsi);
     
-    if (_logger && _logger->getLogLevel() <= LogLevel::LOG_DEBUG) {
+    if (_logger) {
         _logger->debug("Session existence check for IMSI " + imsi + ": " + 
                       (exists ? "exists" : "not found"));
     }
@@ -90,10 +90,6 @@ size_t InMemorySessionRepository::getSessionCount() const {
     std::lock_guard<std::mutex> lock(_mutex);
     auto count = _sessions.size();
     
-    if (_logger && _logger->getLogLevel() <= LogLevel::LOG_DEBUG) {
-        _logger->debug("Current session count: " + std::to_string(count));
-    }
-    
     return count;
 }
 
@@ -120,15 +116,15 @@ std::vector<Session> InMemorySessionRepository::getExpiredSessions(uint32_t time
         }
     }
     
-    if (_logger) {
-        if (!expiredSessions.empty()) {
-            _logger->debug("Found " + std::to_string(expiredSessions.size()) + 
-                          " expired sessions (timeout: " + std::to_string(timeoutSeconds) + "s)");
-        } else {
-            _logger->debug("No expired sessions found (timeout: " + 
-                          std::to_string(timeoutSeconds) + "s)");
-        }
-    }
-    
     return expiredSessions;
+}
+
+bool InMemorySessionRepository::refreshSession(const std::string& imsi) {
+    std::lock_guard<std::mutex> lock(_mutex);
+    auto it = _sessions.find(imsi);
+    if (it != _sessions.end()) {
+        it->second.refresh();
+        return true;
+    }
+    return false;
 }

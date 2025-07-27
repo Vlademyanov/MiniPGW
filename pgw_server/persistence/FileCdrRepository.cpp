@@ -1,4 +1,4 @@
-#include "FileCdrRepository.h"
+#include <FileCdrRepository.h>
 #include <chrono>
 #include <iomanip>
 #include <sstream>
@@ -67,7 +67,7 @@ bool FileCdrRepository::writeCdr(const std::string& imsi, const std::string& act
         return false;
     }
     
-    if (_logger && _logger->getLogLevel() <= LogLevel::LOG_DEBUG) {
+    if (_logger) {
         _logger->debug("CDR record written: " + timestamp + "," + imsi + "," + action);
     }
     
@@ -99,10 +99,6 @@ bool FileCdrRepository::openFileIfNeeded() {
         }
         return false;
     }
-    
-    if (_logger && _logger->getLogLevel() <= LogLevel::LOG_DEBUG) {
-        _logger->debug("CDR file opened successfully: " + _filePath);
-    }
-    
+
     return true;
 } 

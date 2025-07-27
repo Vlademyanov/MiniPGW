@@ -1,0 +1,98 @@
+version: '3.8'
+
+services:
+  # Тесты
+  tests:
+    build:
+      context: .
+      dockerfile: pgw_server/Dockerfile.test
+    container_name: pgw_tests
+    command: ["bash", "-c", "cd build && ctest --output-on-failure"]
+    networks:
+      - pgw_network
+    # Сервис завершается после выполнения тестов
+    restart: "no"
+
+  # PGW Server
+  pgw_server:
+    build:
+      context: .
+      dockerfile: pgw_server/Dockerfile
+    container_name: pgw_server
+    ports:
+      - "9000:9000/udp"
+      - "9101:9101" # порт для метрик
+    depends_on:
+      tests:
+        condition: service_completed_successfully # Ждём успешного завершения тестов
+    restart: unless-stopped
+    networks:
+      - pgw_network
+
+  # PGW Client
+  pgw_client:
+    build:
+      context: .
+      dockerfile: pgw_client/Dockerfile
+    container_name: pgw_client
+    command: ["/app/pgw_client", "123456789012345"]
+    depends_on:
+      - pgw_server
+    restart: unless-stopped
+    networks:
+      - pgw_network
+
+  # PGW Flood Client
+  pgw_flood_client:
+    build:
+      context: .
+      dockerfile: pgw_flood_client/Dockerfile
+    container_name: pgw_flood_client
+    ports:
+      - "9100:9100" # порт для метрик
+    depends_on:
+      - pgw_server
+    restart: unless-stopped
+    networks:
+      - pgw_network
+
+  # Prometheus
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    restart: unless-stopped
+    networks:
+      - pgw_network
+    depends_on:
+      - pgw_server
+      - pgw_flood_client
+
+  # Grafana
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    restart: unless-stopped
+    networks:
+      - pgw_network
+    depends_on:
+      - prometheus
+
+networks:
+  pgw_network:
+    driver: bridge
+
+volumes:
+  grafana_data:

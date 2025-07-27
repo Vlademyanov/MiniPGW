@@ -1,13 +1,14 @@
 #pragma once
-#include "../domain/ISessionRepository.h"
-#include "../domain/ICdrRepository.h"
-#include "../domain/Blacklist.h"
-#include "RateLimiter.h"
-#include "../utils/Logger.h"
+#include <ISessionRepository.h>
+#include <ICdrRepository.h>
+#include <Blacklist.h>
+#include <RateLimiter.h>
+#include <Logger.h>
 #include <string>
 #include <memory>
 #include <chrono>
 #include <vector>
+#include <atomic>
 
 /**
  * @brief Результат создания сессии
@@ -70,14 +71,14 @@ public:
      * @param action Действие для записи в CDR
      * @return true если сессия успешно удалена, иначе false
      */
-    [[nodiscard]] bool removeSession(const std::string& imsi, const std::string& action) const;
+    bool removeSession(const std::string& imsi, const std::string& action) const;
     
     /**
      * @brief Очищает истекшие сессии
      * @param timeout Таймаут в секундах
      * @return Количество удаленных сессий
      */
-    [[nodiscard]] size_t cleanExpiredSessions(std::chrono::seconds timeout) const;
+    [[nodiscard]] size_t cleanExpiredSessions(std::chrono::seconds timeout, const std::atomic<bool>* stopFlag = nullptr) const;
     
     /**
      * @brief Возвращает количество активных сессий

@@ -1,4 +1,4 @@
-#include "GracefulShutdownManager.h"
+#include <GracefulShutdownManager.h>
 #include <utility>
 #include <thread>
 #include <algorithm>
@@ -40,38 +40,35 @@ bool GracefulShutdownManager::initiateShutdown() {
     return true;
 }
 
-// bool GracefulShutdownManager::isShutdownInProgress() const {
-//     return _shutdownInProgress;
-// }
-//
-// bool GracefulShutdownManager::isShutdownComplete() const {
-//     return _shutdownComplete;
-// }
+bool GracefulShutdownManager::isShutdownInProgress() const {
+    return _shutdownInProgress;
+}
 
-bool GracefulShutdownManager::waitForCompletion(std::chrono::seconds timeout) {
+bool GracefulShutdownManager::isShutdownComplete() const {
+    return _shutdownComplete;
+}
+
+void GracefulShutdownManager::stop() {
+    _stopRequested = true;
+    _shutdownCondition.notify_all(); // мгновенно пробудить поток
+    if (_shutdownThread.joinable()) {
+        _logger->debug("GracefulShutdownManager::stop: Waiting for shutdown thread to complete");
+        _shutdownThread.join();
+    }
+}
+
+bool GracefulShutdownManager::waitForCompletion() {
     // Если процесс не запущен или уже завершен, сразу возвращаемся
     if (!_shutdownInProgress || _shutdownComplete) {
         _logger->debug("waitForCompletion: No shutdown in progress or already complete");
         return true;
     }
-    
-    _logger->debug("Waiting for shutdown completion with timeout: " + std::to_string(timeout.count()) + "s");
-    
-    // Ждем завершения с таймаутом или без
+
     std::unique_lock<std::mutex> lock(_shutdownMutex);
-    if (timeout.count() > 0) {
-        // Ждем с таймаутом
-        bool completed = _shutdownCondition.wait_for(lock, timeout, [this] { return _shutdownComplete.load(); });
-        if (!completed) {
-            _logger->warn("Shutdown completion wait timed out after " + std::to_string(timeout.count()) + "s");
-        }
-        return completed;
-    } else {
         // Ждем без таймаута
         _shutdownCondition.wait(lock, [this] { return _shutdownComplete.load(); });
         _logger->debug("Shutdown completion wait finished (no timeout)");
         return true;
-    }
 }
 
 void GracefulShutdownManager::shutdownWorker() {
@@ -98,8 +95,13 @@ void GracefulShutdownManager::shutdownWorker() {
         // Удаляем сессии с заданной скоростью
         size_t removedCount = 0;
         auto startTime = std::chrono::steady_clock::now();
+        std::mutex localMutex;
         
         for (const auto& imsi : imsis) {
+            if (_stopRequested) {
+                _logger->info("Graceful shutdown interrupted by stop request");
+                break;
+            }
             // Проверяем, что сессия все еще существует
             if (_sessionManager->isSessionActive(imsi)) {
                 // Удаляем сессию
@@ -119,10 +121,14 @@ void GracefulShutdownManager::shutdownWorker() {
             } else {
                 _logger->debug("Session for IMSI: " + imsi + " no longer active, skipping");
             }
-            
-            // Делаем паузу между удалениями
-            std::this_thread::sleep_for(interval);
+            // Если сессий больше не осталось — завершить shutdown немедленно
+            if (_sessionManager->getActiveSessionsCount() == 0) {
+                _logger->info("All sessions removed, shutdown complete early");
+                break;
             }
+            std::unique_lock<std::mutex> lock(localMutex);
+            _shutdownCondition.wait_for(lock, interval, [this]() { return _stopRequested.load(); });
+        }
         
         // Проверяем, остались ли еще активные сессии
         size_t remainingSessions = _sessionManager->getActiveSessionsCount();

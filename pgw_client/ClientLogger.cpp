@@ -1,4 +1,4 @@
-#include "ClientLogger.h"
+#include <ClientLogger.h>
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
@@ -50,7 +50,7 @@ ClientLogger::ClientLogger(const std::string& logFile, ClientLogLevel level)
                 spdlog_level = spdlog::level::critical;
                 break;
             default:
-                spdlog_level = spdlog::level::info; // По умолчанию INFO
+                spdlog_level = spdlog::level::info;
                 break;
         }
         _logger->set_level(spdlog_level);
@@ -70,13 +70,9 @@ ClientLogger::ClientLogger(const std::string& logFile, ClientLogLevel level)
 }
 
 ClientLogger::~ClientLogger() {
-    try {
-        if (_isHealthy && _logger) {
-            _logger->info("Logger shutting down");
-            _logger->flush();
-        }
-    } catch (...) {
-        // Игнорируем исключения в деструкторе
+    if (_isHealthy && _logger) {
+        _logger->info("Logger shutting down");
+        _logger->flush();
     }
 }
 
@@ -139,13 +135,10 @@ void ClientLogger::log(ClientLogLevel level, const std::string& message) {
     if (!_isHealthy || !_logger) {
         return;
     }
-    
-    // Проверяем уровень логирования
+
     if (level < _logLevel) {
         return;
     }
-    
-    // Логируем сообщение с соответствующим уровнем
     switch (level) {
         case ClientLogLevel::DEBUG:
             _logger->debug(message);

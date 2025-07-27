@@ -14,6 +14,8 @@ set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -DNDEBUG")
 # Включение FetchContent для загрузки зависимостей
 include(FetchContent)
 
+# Поиск системных библиотек
+find_package(Threads REQUIRED)
 
 # Зависимости
 # nlohmann/json
@@ -44,15 +46,36 @@ FetchContent_Declare(
         GIT_TAG v1.12.0
 )
 
+# CURL
+FetchContent_Declare(
+        curl
+        GIT_REPOSITORY https://github.com/curl/curl.git
+        GIT_TAG curl-8_5_0
+)
+
+# Настройки для CURL
+set(BUILD_CURL_EXE OFF CACHE BOOL "Don't build curl executable")
+set(HTTP_ONLY ON CACHE BOOL "Only enable HTTP protocol")
+set(CURL_USE_OPENSSL OFF CACHE BOOL "Don't use OpenSSL")
+set(BUILD_TESTING OFF CACHE BOOL "Don't build curl tests")
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build static libraries")
+
+# Prometheus CPP
+FetchContent_Declare(
+        prometheus_cpp
+        GIT_REPOSITORY https://github.com/jupp0r/prometheus-cpp.git
+        GIT_TAG        v1.2.1
+)
+
+# Настройки Prometheus CPP - отключаем все, кроме core
+set(ENABLE_TESTING OFF CACHE BOOL "Disable tests" FORCE)
+set(BUILD_TESTING OFF CACHE BOOL "Disable tests" FORCE)
+set(PROMETHEUS_CPP_PULL ON CACHE BOOL "Enable pull exporter" FORCE)
+set(PROMETHEUS_CPP_PUSH OFF CACHE BOOL "Disable push exporter" FORCE)
+set(PROMETHEUS_CPP_LOGGING OFF CACHE BOOL "Disable internal logging" FORCE)
+
 # Загрузка всех зависимостей
-FetchContent_MakeAvailable(nlohmann_json httplib googletest spdlog)
-
-
-# Поиск системных библиотек
-find_package(Threads REQUIRED)
-
-
-# Целевые файлы
+FetchContent_MakeAvailable(nlohmann_json httplib googletest spdlog curl prometheus_cpp)
 
 # PGW Server
 add_executable(pgw_server
@@ -100,14 +123,28 @@ add_executable(pgw_server
         # Утилиты
         pgw_server/utils/Logger.cpp
         pgw_server/utils/Logger.h
+        pgw_server/utils/ServerMetrics.cpp
+        pgw_server/utils/ServerMetrics.h
 )
 
-target_include_directories(pgw_server PRIVATE pgw_server)
+target_include_directories(pgw_server PRIVATE
+        ${CMAKE_SOURCE_DIR}/pgw_server
+        ${CMAKE_SOURCE_DIR}/pgw_server/domain
+        ${CMAKE_SOURCE_DIR}/pgw_server/application
+        ${CMAKE_SOURCE_DIR}/pgw_server/persistence
+        ${CMAKE_SOURCE_DIR}/pgw_server/utils
+        ${CMAKE_SOURCE_DIR}/pgw_server/config
+        ${CMAKE_SOURCE_DIR}/pgw_server/udp
+        ${CMAKE_SOURCE_DIR}/pgw_server/http
+)
+
 target_link_libraries(pgw_server PRIVATE
         nlohmann_json::nlohmann_json
         httplib::httplib
         spdlog::spdlog
         Threads::Threads
+        prometheus-cpp::core
+        prometheus-cpp::pull
 )
 
 # PGW Client
@@ -121,13 +158,45 @@ add_executable(pgw_client
         pgw_client/ClientLogger.h
 )
 
-target_include_directories(pgw_client PRIVATE pgw_client)
+target_include_directories(pgw_client PRIVATE ${CMAKE_SOURCE_DIR}/pgw_client)
 target_link_libraries(pgw_client PRIVATE
         nlohmann_json::nlohmann_json
         spdlog::spdlog
         Threads::Threads
 )
+# PGW Flood client
+add_executable(pgw_flood_client
+        pgw_flood_client/main.cpp
+        pgw_flood_client/FloodManager.h
+        pgw_flood_client/FloodManager.cpp
+        pgw_flood_client/FloodWorker.h
+        pgw_flood_client/FloodWorker.cpp
+        pgw_flood_client/ImsiGenerator.h
+        pgw_flood_client/ImsiGenerator.cpp
 
+        pgw_client/PgwClient.cpp
+        pgw_client/PgwClient.h
+        pgw_client/ClientConfig.cpp
+        pgw_client/ClientLogger.cpp
+        pgw_flood_client/Metrics.cpp
+        pgw_flood_client/Metrics.h
+)
+
+target_include_directories(pgw_flood_client PRIVATE
+        ${prometheus_cpp_SOURCE_DIR}/core/include
+        ${prometheus_cpp_SOURCE_DIR}/pull/include
+        ${CMAKE_SOURCE_DIR}/pgw_flood_client
+        ${CMAKE_SOURCE_DIR}/pgw_client
+)
+
+target_link_libraries(pgw_flood_client PRIVATE
+        nlohmann_json::nlohmann_json
+        spdlog::spdlog
+        Threads::Threads
+        prometheus-cpp::core
+        prometheus-cpp::pull
+        libcurl
+)
 
 # Unit тесты
 
@@ -202,13 +271,25 @@ add_executable(pgw_tests
         # Утилиты
         pgw_server/utils/Logger.cpp
         pgw_server/utils/Logger.h
+        pgw_server/utils/ServerMetrics.cpp
+        pgw_server/utils/ServerMetrics.h
 
 )
 
 target_include_directories(pgw_tests PRIVATE
-        pgw_server
-        pgw_server/tests
+        ${CMAKE_SOURCE_DIR}/pgw_server
+        ${CMAKE_SOURCE_DIR}/pgw_server
+        ${CMAKE_SOURCE_DIR}/pgw_server/domain
+        ${CMAKE_SOURCE_DIR}/pgw_server/application
+        ${CMAKE_SOURCE_DIR}/pgw_server/persistence
+        ${CMAKE_SOURCE_DIR}/pgw_server/utils
+        ${CMAKE_SOURCE_DIR}/pgw_server/config
+        ${CMAKE_SOURCE_DIR}/pgw_server/udp
+        ${CMAKE_SOURCE_DIR}/pgw_server/http
+        ${CMAKE_SOURCE_DIR}/pgw_server/tests
 )
+
+
 
 target_link_libraries(pgw_tests PRIVATE
         gtest
@@ -217,6 +298,7 @@ target_link_libraries(pgw_tests PRIVATE
         spdlog::spdlog
         httplib::httplib
         Threads::Threads
+        libcurl
 )
 
 include(GoogleTest)
@@ -230,7 +312,7 @@ configure_file(${CMAKE_SOURCE_DIR}/pgw_client/config/client_config.json
                ${CMAKE_BINARY_DIR}/client_config.json COPYONLY)
 
 # Установка
-install(TARGETS pgw_server pgw_client
+install(TARGETS pgw_server pgw_client pgw_flood_client
         RUNTIME DESTINATION bin
 )
 

@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../application/SessionManager.h"
-#include "../utils/Logger.h"
+#include <SessionManager.h>
+#include <Logger.h>
 #include <string>
 #include <memory>
 #include <thread>

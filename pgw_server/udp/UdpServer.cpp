@@ -1,4 +1,4 @@
-#include "UdpServer.h"
+#include <UdpServer.h>
 #include <utility>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -23,7 +23,7 @@ UdpServer::UdpServer(std::string  ip, uint16_t port,
     if (_port == 0) throw std::invalid_argument("port cannot be 0");
     if (_ip.empty()) throw std::invalid_argument("ip cannot be empty");
     
-    _logger->info("UDP server initialized for " + _ip + ":" + std::to_string(_port));
+    _logger->info("UDP server initialized on " + _ip + ":" + std::to_string(_port));
 }
 
 UdpServer::~UdpServer() {
@@ -71,7 +71,6 @@ bool UdpServer::start() {
         return false;
     }
     
-    _logger->info("UDP socket bound to " + _ip + ":" + std::to_string(_port));
     
     // Настраиваем epoll
     if (!setupEpollSocket()) {
@@ -93,7 +92,6 @@ void UdpServer::stop() {
         return;
     }
     
-    _logger->info("Stopping UDP server");
     _running = false;
     
     if (_serverThread.joinable()) {
@@ -113,8 +111,6 @@ void UdpServer::serverLoop() {
     constexpr int MAX_EVENTS = 512; // для высоконагруженных систем 128-1024
     struct epoll_event events[MAX_EVENTS];
     char buffer[8 * 1024];
-    
-    _logger->debug("UDP server loop started");
     
     while (_running) {
         // Ждем события с таймаутом 30 мс для высоконагруженных систем 10-50
@@ -158,8 +154,6 @@ void UdpServer::serverLoop() {
             }
         }
     }
-    
-    _logger->debug("UDP server loop ended");
 }
 
 void UdpServer::handleIncomingPacket(const char* buffer, size_t length,
