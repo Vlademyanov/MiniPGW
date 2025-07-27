@@ -55,6 +55,71 @@ make
   "log_file": "client.log",
   "log_level": "INFO"
 }
+
+```
+
+Запустите клиент:
+```bash
+./pgw_client 001010123456780
+```
+# Mini-PGW
+
+Упрощённая модель сетевого компонента PGW (Packet Gateway) для управления сессиями мобильных абонентов.
+
+## Что делает проект
+
+**pgw_server** — основной сервер, который:
+- Принимает UDP-запросы с IMSI абонентов
+- Создаёт/отклоняет сессии на основе чёрного списка
+- Ведёт CDR-журнал всех операций
+- Предоставляет HTTP API для мониторинга
+- Автоматически удаляет истёкшие сессии
+
+**pgw_client** — тестовый клиент для отправки запросов на сервер
+
+## Быстрый запуск
+
+### 1. Сборка проекта
+```bash
+mkdir build && cd build
+cmake ..
+make
+```
+
+### 2. Настройка сервера
+Создайте `config/server_config.json`:
+```json
+{
+  "udp_ip": "0.0.0.0",
+  "udp_port": 9000,
+  "http_port": 8080,
+  "session_timeout_sec": 30,
+  "cdr_file": "cdr.log",
+  "log_file": "pgw.log",
+  "log_level": "INFO",
+  "graceful_shutdown_rate": 10,
+  "blacklist": [
+    "001010123456789",
+    "001010000000001"
+  ]
+}
+```
+
+### 3. Запуск сервера
+```bash
+./pgw_server
+```
+
+### 4. Тестирование клиентом
+Создайте `config/client_config.json`:
+```json
+{
+  "server_ip": "127.0.0.1",
+  "server_port": 9000,
+  "log_file": "client.log",
+  "log_level": "DEBUG",
+  "receive_timeout_ms": 5000
+}
 ```
 
 Запустите клиент:
@@ -62,21 +127,129 @@ make
 ./pgw_client 001010123456780
 ```
 
-## Использование
+## Использование сервера
 
-### Тестирование с клиентом
+### HTTP API
+
+**Проверка статуса абонента:**
+```bash
+curl "http://localhost:8080/check_subscriber?imsi=001010123456780"
+# Ответ: active или not active
+```
+
+**Остановка сервера:**
+```bash
+curl http://localhost:8080/stop
+# Ответ: Graceful shutdown initiated
+```
+
+**Проверка работоспособности:**
+```bash
+curl http://localhost:8080/health
+# Ответ: OK
+```
+
+---
+
+## Использование клиента
+
+### pgw_client - тестовый клиент
+
+**Запуск клиента:**
+```bash
+./pgw_client <15-значный_IMSI>
+```
+
+**Примеры использования:**
 ```bash
 # Отправка запроса с валидным IMSI
 ./pgw_client 001010123456780
-# Ответ: created
+# Вывод: 
+# Sending request for IMSI: 001010123456780
+# Response: created
 
 # Отправка запроса с IMSI из чёрного списка
 ./pgw_client 001010123456789
-# Ответ: rejected
+# Вывод:
+# Sending request for IMSI: 001010123456789
+# Response: rejected
 
 # Повторный запрос с тем же IMSI
 ./pgw_client 001010123456780
-# Ответ: created (сессия уже существует)
+# Вывод:
+# Sending request for IMSI: 001010123456780
+# Response: created
+
+# Неправильный формат IMSI
+./pgw_client 12345
+# Вывод:
+# Error: IMSI must be a 15-digit number
+# Usage: ./pgw_client <IMSI>
+```
+
+**Что делает клиент:**
+1. Читает конфигурацию из `client_config.json`
+2. Проверяет формат IMSI (15 цифр)
+3. Кодирует IMSI в BCD формат (согласно TS 29.274 §8.3)
+4. Отправляет UDP пакет на сервер
+5. Ожидает ответ с таймаутом
+6. Выводит результат и логирует операцию
+
+### Конфигурация клиента
+
+Параметры в `config/client_config.json`:
+
+| Параметр | Описание | По умолчанию |
+|----------|----------|--------------|
+| `server_ip` | IP-адрес сервера | "127.0.0.1" |
+| `server_port` | Порт сервера | 9000 |
+| `log_file` | Путь к файлу логов | "client.log" |
+| `log_level` | Уровень логирования | "INFO" |
+| `receive_timeout_ms` | Таймаут ответа в мс | 5000 |
+
+**Пример полной конфигурации:**
+```json
+{
+  "server_ip": "192.168.1.100",
+  "server_port": 9000,
+  "log_file": "client.log", 
+  "log_level": "DEBUG",
+  "receive_timeout_ms": 3000
+}
+```
+
+### Тестирование работы системы
+
+**Сценарий 1: Создание новой сессии**
+```bash
+# Запустите сервер
+./pgw_server
+
+# В другом терминале отправьте запрос
+./pgw_client 001010123456780
+# Ответ: created
+
+# Проверьте через HTTP API
+curl "http://localhost:8080/check_subscriber?imsi=001010123456780"
+# Ответ: active
+```
+
+**Сценарий 2: Тестирование чёрного списка**
+```bash
+# Добавьте IMSI в blacklist в server_config.json
+# Отправьте запрос
+./pgw_client 001010123456789
+# Ответ: rejected
+```
+
+**Сценарий 3: Тестирование таймаута сессий**
+```bash
+# Создайте сессию
+./pgw_client 001010123456780
+# Подождите время больше session_timeout_sec
+# Проверьте статус
+curl "http://localhost:8080/check_subscriber?imsi=001010123456780"
+# Ответ: not active
 ```
 
 ### HTTP API
