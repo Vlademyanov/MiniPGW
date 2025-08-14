@@ -1,4 +1,4 @@
-#include "SessionCleaner.h"
+#include <SessionCleaner.h>
 #include <utility>
 
 SessionCleaner::SessionCleaner(std::shared_ptr<SessionManager> sessionManager,
@@ -41,8 +41,7 @@ void SessionCleaner::stop() {
     }
     
     _logger->info("Stopping session cleanup service");
-    
-    // Уведомляем поток очистки о необходимости завершения
+
     _cv.notify_all();
     
     if (_cleanerThread.joinable()) {
@@ -60,7 +59,7 @@ void SessionCleaner::cleanerWorker() {
         try {
             // Очищаем истекшие сессии
             auto startTime = std::chrono::steady_clock::now();
-            size_t removedCount = _sessionManager->cleanExpiredSessions(_sessionTimeout);
+            size_t removedCount = _sessionManager->cleanExpiredSessions(_sessionTimeout, &_running);
             
             if (removedCount > 0) {
                 auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(

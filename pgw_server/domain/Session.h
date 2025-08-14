@@ -2,7 +2,7 @@
 #pragma once
 #include <string>
 #include <chrono>
-#include "../utils/Logger.h"
+#include <Logger.h>
 #include <memory>
 
 
@@ -54,6 +54,8 @@ public:
      * @return Возраст сессии в секундах
      */
     [[nodiscard]] std::chrono::seconds getAge() const;
+
+    void refresh();
 
 private:
     /**

@@ -1,8 +1,8 @@
 #pragma once
 
-#include "../application/SessionManager.h"
-#include "../application/GracefulShutdownManager.h"
-#include "../utils/Logger.h"
+#include <SessionManager.h>
+#include <GracefulShutdownManager.h>
+#include <Logger.h>
 #include <string>
 #include <memory>
 #include <thread>

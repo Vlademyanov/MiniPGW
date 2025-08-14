@@ -1,8 +1,8 @@
 #pragma once
 
-#include "../domain/ISessionRepository.h"
-#include "../domain/Session.h"
-#include "../utils/Logger.h"
+#include <ISessionRepository.h>
+#include <Session.h>
+#include <Logger.h>
 #include <unordered_map>
 #include <mutex>
 #include <string>
@@ -80,6 +80,8 @@ public:
      * @return Вектор истёкших сессий
      */
     [[nodiscard]] std::vector<Session> getExpiredSessions(uint32_t timeoutSeconds) const override;
+
+    bool refreshSession(const std::string& imsi) override;
 
 private:
     mutable std::mutex _mutex; // Мьютекс для потокобезопасности

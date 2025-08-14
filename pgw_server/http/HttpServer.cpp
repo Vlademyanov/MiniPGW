@@ -1,4 +1,4 @@
-#include "HttpServer.h"
+#include <HttpServer.h>
 #include <httplib.h>
 #include <utility>
 #include <stdexcept>
@@ -74,7 +74,6 @@ void HttpServer::stop() {
         return;
     }
     
-    _logger->info("Stopping HTTP server");
     _running = false;
     
     // Останавливаем HTTP сервер
@@ -144,8 +143,7 @@ void HttpServer::setupRoutes() const {
         res.status = 404;
         res.set_content("Not Found", "text/plain");
     });
-    
-    _logger->info("HTTP routes configured");
+
 }
 
 void HttpServer::handleCheckSubscriber(const std::string& imsi, std::string& response) const {

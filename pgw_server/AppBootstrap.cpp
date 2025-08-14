@@ -1,15 +1,15 @@
-#include "AppBootstrap.h"
-#include "config/JsonConfigAdapter.h"
-#include "udp/UdpServer.h"
-#include "http/HttpServer.h"
-#include "application/SessionManager.h"
-#include "application/GracefulShutdownManager.h"
-#include "application/SessionCleaner.h"
-#include "application/RateLimiter.h"
-#include "persistence/InMemorySessionRepository.h"
-#include "persistence/FileCdrRepository.h"
-#include "utils/Logger.h"
-#include "domain/Blacklist.h"
+#include <AppBootstrap.h>
+#include <JsonConfigAdapter.h>
+#include <UdpServer.h>
+#include <HttpServer.h>
+#include <SessionManager.h>
+#include <GracefulShutdownManager.h>
+#include <SessionCleaner.h>
+#include <RateLimiter.h>
+#include <InMemorySessionRepository.h>
+#include <FileCdrRepository.h>
+#include <Logger.h>
+#include <Blacklist.h>
 #include <iostream>
 #include <csignal>
 #include <chrono>
@@ -18,6 +18,8 @@
 #include <unistd.h>
 #include <stdexcept>
 #include <filesystem>
+
+#include <ServerMetrics.h>
 
 // Глобальный указатель для обработчика сигналов
 static AppBootstrap* g_appBootstrap = nullptr;
@@ -123,19 +125,14 @@ void AppBootstrap::initiateShutdown() {
             if (_logger) {
                 _logger->info("Waiting for graceful shutdown to complete...");
             }
-            
-            // Получаем таймаут из конфигурации (по умолчанию 30 секунд)
-            uint32_t shutdownTimeoutSec = _config ? _config->getUint("shutdown_timeout_sec", 30) : 30;
-            _logger->debug("Waiting for shutdown completion with timeout: " + std::to_string(shutdownTimeoutSec) + "s");
-            
-            // Ждем завершения всех сессий с таймаутом
-            if (_shutdownManager->waitForCompletion(std::chrono::seconds(shutdownTimeoutSec))) {
+
+            if (_shutdownManager->waitForCompletion()) {
                 if (_logger) {
                     _logger->info("All sessions successfully offloaded");
                 }
             } else {
                 if (_logger) {
-                    _logger->warn("Graceful shutdown timed out, some sessions may not have been properly terminated");
+                    _logger->warn("Graceful shutdown did not complete as expected");
                 }
             }
         } else {
@@ -173,18 +170,21 @@ std::string AppBootstrap::findConfigFile() {
 }
 
 void AppBootstrap::setupComponents() {
+
     // Находим конфигурационный файл
     std::string configPath = findConfigFile();
-    
+
     // Создаем конфигурацию
     _config = std::make_unique<JsonConfigAdapter>(configPath);
     _config->load();
-    
+
+    int metrics_port = _config->getUint("metrics_port", 9101);
+    ServerMetrics::init(metrics_port);
+
     // Создаем логгер
     std::string logFile = _config->getString("log_file", "pgw.log");
     std::string logLevelStr = _config->getString("log_level", "INFO");
     _logger = std::make_unique<Logger>(logFile, Logger::stringToLevel(logLevelStr));
-    _logger->info("Logger initialized");
     _logger->info("Configuration loaded from: " + configPath);
     
     // Создаем shared_ptr для логгера
@@ -196,7 +196,6 @@ void AppBootstrap::setupComponents() {
     
     std::string cdrFile = _config->getString("cdr_file", "cdr.log");
     _cdrRepo = std::make_unique<FileCdrRepository>(cdrFile, logger);
-    _logger->info("CDR repository initialized with file: " + cdrFile);
     
     // Создаем shared_ptr для репозиториев
     auto sessionRepo = createSharedFromUnique(_sessionRepo.get());
@@ -213,7 +212,6 @@ void AppBootstrap::setupComponents() {
     // Создаем ограничитель скорости запросов
     uint32_t maxRequestsPerMinute = _config->getUint("max_requests_per_minute", 100);
     _rateLimiter = std::make_unique<RateLimiter>(maxRequestsPerMinute, logger);
-    _logger->info("Rate limiter initialized with " + std::to_string(maxRequestsPerMinute) + " requests/minute");
     
     // Создаем shared_ptr для ограничителя скорости
     auto rateLimiter = createSharedFromUnique(_rateLimiter.get());
@@ -226,7 +224,6 @@ void AppBootstrap::setupComponents() {
         rateLimiter,
         logger
     );
-    _logger->info("Session manager initialized");
     
     // Создаем shared_ptr для менеджера сессий
     auto sessionManager = createSharedFromUnique(_sessionManager.get());
@@ -240,8 +237,6 @@ void AppBootstrap::setupComponents() {
         logger,
         std::chrono::seconds(cleanupIntervalSec)
     );
-    _logger->info("Session cleaner initialized with timeout: " + std::to_string(sessionTimeoutSec) + 
-                 "s, interval: " + std::to_string(cleanupIntervalSec) + "s");
     
     // Создаем менеджер плавного завершения
     uint32_t gracefulShutdownRate = _config->getUint("graceful_shutdown_rate", 10);
@@ -250,8 +245,7 @@ void AppBootstrap::setupComponents() {
         gracefulShutdownRate,
         logger
     );
-    _logger->info("Graceful shutdown manager initialized with rate: " + std::to_string(gracefulShutdownRate) + " sessions/sec");
-    
+
     // Создаем UDP сервер
     std::string serverIp = _config->getString("udp_ip", "0.0.0.0");
     uint16_t udpPort = static_cast<uint16_t>(_config->getUint("udp_port", 9000));
@@ -261,7 +255,6 @@ void AppBootstrap::setupComponents() {
         sessionManager,
         logger
     );
-    _logger->info("UDP server initialized on " + serverIp + ":" + std::to_string(udpPort));
     
     // Создаем HTTP сервер
     uint16_t httpPort = static_cast<uint16_t>(_config->getUint("http_port", 8080));
@@ -274,14 +267,12 @@ void AppBootstrap::setupComponents() {
         logger,
         [this]() { this->initiateShutdown(); }
     );
-    _logger->info("HTTP server initialized on " + serverIp + ":" + std::to_string(httpPort));
 }
 
 void AppBootstrap::startServices() const {
     // Запускаем очиститель сессий
     if (_sessionCleaner) {
         _sessionCleaner->start();
-        _logger->info("Session cleaner started");
     }
     
     // Запускаем UDP сервер
@@ -289,7 +280,6 @@ void AppBootstrap::startServices() const {
         if (!_udpServer->start()) {
             throw std::runtime_error("Failed to start UDP server");
         }
-        _logger->info("UDP server started");
     }
     
     // Запускаем HTTP сервер
@@ -297,7 +287,6 @@ void AppBootstrap::startServices() const {
         if (!_httpServer->start()) {
             throw std::runtime_error("Failed to start HTTP server");
         }
-        _logger->info("HTTP server started");
     }
 }
 
@@ -305,24 +294,20 @@ void AppBootstrap::stopServices() const {
     // Останавливаем HTTP сервер
     if (_httpServer) {
         _httpServer->stop();
-        if (_logger) {
-            _logger->info("HTTP server stopped");
-        }
     }
     
     // Останавливаем UDP сервер
     if (_udpServer) {
         _udpServer->stop();
-        if (_logger) {
-            _logger->info("UDP server stopped");
-        }
     }
     
     // Останавливаем очиститель сессий
     if (_sessionCleaner) {
         _sessionCleaner->stop();
-        if (_logger) {
-            _logger->info("Session cleaner stopped");
-        }
+        
+    }
+    // Останавливаем менеджер плавного завершения
+    if (_shutdownManager) {
+        _shutdownManager->stop();
     }
 }

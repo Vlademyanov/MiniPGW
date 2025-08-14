@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../domain/ICdrRepository.h"
-#include "../utils/Logger.h"
+#include <ICdrRepository.h>
+#include <Logger.h>
 #include <string>
 #include <fstream>
 #include <mutex>
@@ -28,7 +28,7 @@ public:
      */
     FileCdrRepository(std::string filePath, std::shared_ptr<Logger> logger);
     
-    ~FileCdrRepository() override;
+    ~FileCdrRepository();
 
     // Запрещаем копирование и перемещение
     FileCdrRepository(const FileCdrRepository&) = delete;

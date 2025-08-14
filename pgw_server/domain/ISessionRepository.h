@@ -1,9 +1,11 @@
 #pragma once
 
-#include "Session.h"
+#include <Session.h>
 #include <string>
 #include <vector>
 #include <memory>
+
+#include "Session.h"
 
 /**
  * @brief Интерфейс репозитория сессий
@@ -58,4 +60,6 @@ public:
      * @return Вектор истекших сессий
      */
     [[nodiscard]] virtual std::vector<Session> getExpiredSessions(uint32_t timeoutSeconds) const = 0;
+
+    virtual bool refreshSession(const std::string& imsi) = 0;
 };

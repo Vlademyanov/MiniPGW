@@ -1,4 +1,4 @@
-#include "PgwClient.h"
+#include <PgwClient.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -20,16 +20,13 @@ PgwClient::~PgwClient() {
 }
 
 bool PgwClient::initialize() {
-    // Загружаем конфигурацию
     if (!_config->loadConfig()) {
         std::cerr << "Failed to load configuration" << std::endl;
         return false;
     }
     
-    // Настраиваем логгер
     const auto& config = _config->getConfig();
     
-    // Преобразование строкового уровня логирования в enum
     ClientLogLevel logLevel = ClientLogLevel::INFO;
     if (config.log_level == "DEBUG") {
         logLevel = ClientLogLevel::DEBUG;
@@ -43,13 +40,11 @@ bool PgwClient::initialize() {
         logLevel = ClientLogLevel::CRITICAL;
     }
     
-    // Создаем новый логгер с настройками из конфигурации
     _logger = std::make_unique<ClientLogger>(config.log_file, logLevel);
     
     _logger->info("Client initialized with server: " + config.server_ip + ":" + 
                   std::to_string(config.server_port));
     
-    // Настраиваем UDP сокет
     return setupUdpSocket();
 }
 
@@ -90,7 +85,6 @@ bool PgwClient::setupUdpSocket() {
     // Закрываем сокет, если он уже был открыт
     closeSocket();
     
-    // Создаем UDP сокет
     _socket = socket(AF_INET, SOCK_DGRAM, 0);
     if (_socket < 0) {
         _logger->error("Failed to create UDP socket: " + std::string(strerror(errno)));
@@ -120,10 +114,10 @@ std::pair<bool, std::string> PgwClient::encodeImsiToBcd(const std::string& imsi)
     std::string bcdImsi;
     
     // Добавляем заголовок пакета (4 байта)
-    bcdImsi.push_back(0x01); // Тип пакета
-    bcdImsi.push_back(0x00); // Версия
-    bcdImsi.push_back(0x00); // Зарезервировано
-    bcdImsi.push_back(0x00); // Зарезервировано
+    bcdImsi.push_back(0x01);
+    bcdImsi.push_back(0x00);
+    bcdImsi.push_back(0x00);
+    bcdImsi.push_back(0x00);
     
     // Резервируем память для данных IMSI
     bcdImsi.reserve(4 + (imsi.length() + 1) / 2);
@@ -171,10 +165,10 @@ bool PgwClient::sendUdpPacket(const std::string& bcdImsi) {
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_port = htons(config.server_port);
     
-    if (inet_pton(AF_INET, config.server_ip.c_str(), &(serverAddr.sin_addr)) <= 0) {
-        _logger->error("Invalid IP address: " + config.server_ip);
-        return false;
-    }
+    // if (inet_pton(AF_INET, config.server_ip.c_str(), &(serverAddr.sin_addr)) <= 0) {
+    //     _logger->error("Invalid IP address: " + config.server_ip);
+    //     return false;
+    // }
     
     // Отправляем пакет
     ssize_t bytesSent = sendto(_socket, bcdImsi.c_str(), bcdImsi.length(), 0,
@@ -233,9 +227,6 @@ std::pair<bool, std::string> PgwClient::receiveResponse() {
         _logger->error("Failed to receive response: " + std::string(strerror(errno)));
         return {false, ""};
     }
-    
-    // Добавляем нулевой символ в конец для корректного преобразования в строку
-    buffer[bytesRead] = '\0';
     
     // Преобразуем IP адрес в строку для логирования
     char serverIp[INET_ADDRSTRLEN];

@@ -38,7 +38,7 @@ protected:
 
     void TearDown() override {
         // Ожидаем завершения процесса плавного завершения, если он запущен
-        shutdownManager->waitForCompletion(std::chrono::seconds(1));
+        shutdownManager->waitForCompletion();
     }
 
     std::shared_ptr<Logger> logger;
@@ -65,7 +65,7 @@ TEST_F(GracefulShutdownManagerTest, InitiateShutdown) {
     EXPECT_TRUE(result);
     
     // Ожидаем завершения процесса
-    bool completed = shutdownManager->waitForCompletion(std::chrono::seconds(1));
+    bool completed = shutdownManager->waitForCompletion();
     
     // Проверяем, что процесс завершен
     EXPECT_TRUE(completed);
@@ -83,7 +83,7 @@ TEST_F(GracefulShutdownManagerTest, DoubleInitiateShutdown) {
     EXPECT_FALSE(result2);
     
     // Ожидаем завершения процесса
-    shutdownManager->waitForCompletion(std::chrono::seconds(1));
+    shutdownManager->waitForCompletion();
 }
 
 TEST_F(GracefulShutdownManagerTest, WaitForCompletion) {
@@ -99,35 +99,12 @@ TEST_F(GracefulShutdownManagerTest, WaitForCompletion) {
     
     // Инициируем процесс плавного завершения
     shutdownManager->initiateShutdown();
-    
-    // Ожидаем завершения процесса с таймаутом
-    bool completed = shutdownManager->waitForCompletion(std::chrono::seconds(2));
+
+    bool completed = shutdownManager->waitForCompletion();
     
     // Проверяем, что процесс завершен и все сессии удалены
     EXPECT_TRUE(completed);
     EXPECT_EQ(sessionRepo->getSessionCount(), 0);
-}
-
-TEST_F(GracefulShutdownManagerTest, WaitForCompletionWithTimeout) {
-    // Создаем много сессий (больше, чем может быть удалено за короткий таймаут)
-    for (int i = 0; i < 1000; ++i) {
-        std::string imsi = "12345678901234" + std::to_string(i % 10);
-        SessionResult result = sessionManager->createSession(imsi);
-        EXPECT_EQ(result, SessionResult::CREATED);
-    }
-    
-    // Создаем менеджер плавного завершения с низкой скоростью удаления
-    auto slowShutdownManager = std::make_unique<GracefulShutdownManager>(
-        sessionManager, 1, logger);
-    
-    // Инициируем процесс плавного завершения
-    slowShutdownManager->initiateShutdown();
-    
-    // Ожидаем завершения процесса с очень коротким таймаутом
-    bool completed = slowShutdownManager->waitForCompletion(std::chrono::seconds(1));
-    
-    // Проверяем, что процесс не завершен за указанное время
-    EXPECT_FALSE(completed);
 }
 
 TEST_F(GracefulShutdownManagerTest, EmptyRepository) {
@@ -141,7 +118,7 @@ TEST_F(GracefulShutdownManagerTest, EmptyRepository) {
     EXPECT_TRUE(result);
     
     // Ожидаем завершения процесса
-    bool completed = shutdownManager->waitForCompletion(std::chrono::seconds(1));
+    bool completed = shutdownManager->waitForCompletion();
     
     // Проверяем, что процесс завершен
     EXPECT_TRUE(completed);

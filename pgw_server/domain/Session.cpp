@@ -1,4 +1,4 @@
-#include "Session.h"
+#include <Session.h>
 #include <stdexcept>
 #include <regex>
 
@@ -41,7 +41,7 @@ std::chrono::seconds Session::getAge() const {
     auto now = std::chrono::system_clock::now();
     auto age = std::chrono::duration_cast<std::chrono::seconds>(now - _createdAt);
     
-    if (_logger && _logger->getLogLevel() <= LogLevel::LOG_DEBUG) {
+    if (_logger) {
         _logger->debug("Session for IMSI " + _imsi + " age: " + std::to_string(age.count()) + "s");
     }
     
@@ -53,5 +53,12 @@ void Session::validateImsi(const std::string& imsi) {
     if (!std::regex_match(imsi, imsiPattern)) {
         std::string errorMsg = "Invalid IMSI format: " + imsi + ". IMSI must be 15 digits.";
         throw std::invalid_argument(errorMsg);
+    }
+} 
+
+void Session::refresh() {
+    _createdAt = std::chrono::system_clock::now();
+    if (_logger) {
+        _logger->debug("Session for IMSI " + _imsi + " refreshed (createdAt updated)");
     }
 } 
